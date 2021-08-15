@@ -3,7 +3,6 @@ const { open } = require("sqlite");
 const sqlite3 = require("sqlite3");
 const path = require("path");
 const format = require("date-fns/format");
-const isValid = require("date-fns/isValid");
 
 const databasePath = path.join(__dirname, "todoApplication.db");
 
@@ -31,7 +30,7 @@ const initializeDbAndServer = async () => {
 
 initializeDbAndServer();
 
-const convertTodoToJson = (dbObject) => {
+const convertObject = (dbObject) => {
   return {
     id: dbObject.id,
     todo: dbObject.todo,
@@ -69,11 +68,6 @@ const statusArray = ["TO DO", "IN PROGRESS", "DONE"];
 const priorityArray = ["HIGH", "MEDIUM", "LOW"];
 const categoryArray = ["WORK", "HOME", "LEARNING"];
 
-const formatDate = (date) => {
-  let formattedDate = format(new Date(date), "yyyy-MM-dd");
-  return formattedDate;
-};
-
 app.get("/todos", async (request, response) => {
   let { priority, status, category, search_q = "" } = request.query;
   let getTodosQuery = `SELECT * FROM todo WHERE todo LIKE '%${search_q}%'`;
@@ -81,7 +75,7 @@ app.get("/todos", async (request, response) => {
     if (statusArray.includes(status) && priorityArray.includes(priority)) {
       getTodosQuery = `SELECT * FROM todo WHERE status = '${status}' AND priority = '${priority}' AND todo LIKE '%${search_q}%'`;
       const todos = await database.all(getTodosQuery);
-      response.send(todos.map((todo) => convertTodoToJson(todo)));
+      response.send(todos.map((todo) => convertObject(todo)));
     } else if (
       statusArray.includes(status) &&
       !priorityArray.includes(priority)
@@ -101,7 +95,7 @@ app.get("/todos", async (request, response) => {
     if (categoryArray.includes(category) && statusArray.includes(status)) {
       getTodosQuery = `SELECT * FROM todo WHERE status = '${status}' AND category = '${category}' AND todo LIKE '%${search_q}%'`;
       const todos = await database.all(getTodosQuery);
-      response.send(todos.map((todo) => convertTodoToJson(todo)));
+      response.send(todos.map((todo) => convertObject(todo)));
     } else if (
       categoryArray.includes(category) &&
       !statusArray.includes(status)
@@ -122,7 +116,7 @@ app.get("/todos", async (request, response) => {
     if (categoryArray.includes(category) && priorityArray.includes(priority)) {
       getTodosQuery = `SELECT * FROM todo WHERE category = '${category}' AND priority = '${priority}' AND todo LIKE '%${search_q}%'`;
       const todos = await database.all(getTodosQuery);
-      response.send(todos.map((todo) => convertTodoToJson(todo)));
+      response.send(todos.map((todo) => convertObject(todo)));
     } else if (
       categoryArray.includes(category) &&
       !priorityArray.includes(priority)
@@ -143,7 +137,7 @@ app.get("/todos", async (request, response) => {
     if (categoryArray.includes(category)) {
       getTodosQuery = `SELECT * FROM todo WHERE category = '${category}' AND todo LIKE '%${search_q}%'`;
       const todos = await database.all(getTodosQuery);
-      response.send(todos.map((todo) => convertTodoToJson(todo)));
+      response.send(todos.map((todo) => convertObject(todo)));
     } else {
       response.status(400);
       response.send("Invalid Todo Category");
@@ -152,7 +146,7 @@ app.get("/todos", async (request, response) => {
     if (priorityArray.includes(priority)) {
       getTodosQuery = `SELECT * FROM todo WHERE priority = '${priority}' AND todo LIKE '%${search_q}%'`;
       const todos = await database.all(getTodosQuery);
-      response.send(todos.map((todo) => convertTodoToJson(todo)));
+      response.send(todos.map((todo) => convertObject(todo)));
     } else {
       response.status(400);
       response.send("Invalid Todo Priority");
@@ -161,14 +155,14 @@ app.get("/todos", async (request, response) => {
     if (statusArray.includes(status)) {
       getTodosQuery = `SELECT * FROM todo WHERE status = '${status}' AND todo LIKE '%${search_q}%'`;
       const todos = await database.all(getTodosQuery);
-      response.send(todos.map((todo) => convertTodoToJson(todo)));
+      response.send(todos.map((todo) => convertObject(todo)));
     } else {
       response.status(400);
       response.send("Invalid Todo Status");
     }
   } else {
     const todos = await database.all(getTodosQuery);
-    response.send(todos.map((todo) => convertTodoToJson(todo)));
+    response.send(todos.map((todo) => convertObject(todo)));
   }
 });
 
@@ -183,41 +177,38 @@ app.get("/todos/:todoId/", async (request, response) => {
       id = ${todoId};
     `;
   const todo = await database.get(getTodoQuery);
-  response.send(convertTodoToJson(todo));
+  response.send(convertObject(todo));
 });
 
 app.get("/agenda/", async (request, response) => {
-  const { date } = request.query;
+  try {
+    const { date } = request.query;
 
-  if (date === undefined) {
-    response.status(400);
-    response.send("Invalid Due Date");
-  } else {
-    const formattedDate = formatDate(date);
-    const isDateValid = isValid(new Date(formattedDate));
-    if (isDateValid) {
+    if (date !== undefined) {
+      const newDate = new Date(date);
+      const formattedDate = format(newDate, "yyyy-MM-dd");
       const getDueDateTodo = `
-    SELECT
-      *
-    FROM
-      todo
-    WHERE due_date = '${formattedDate}';
+         SELECT
+         *
+         FROM
+        todo
+        WHERE due_date = '${formattedDate}';
     `;
       const todos = await database.all(getDueDateTodo);
-      response.send(todos.map((todo) => convertTodoToJson(todo)));
+      response.send(todos.map((todo) => convertObject(todo)));
     } else {
       response.status(400);
       response.send("Invalid Due Date");
     }
+  } catch (e) {
+    response.status(400);
+    response.send("Invalid Due Date");
   }
 });
 
 app.post("/todos/", async (request, response) => {
   const { id, todo, priority, status, category, dueDate } = request.body;
   try {
-    const formattedDate = formatDate(dueDate);
-    const isDateValid = isValid(new Date(formattedDate));
-
     if (!statusArray.includes(status)) {
       response.status(400);
       response.send("Invalid Todo Status");
@@ -227,17 +218,17 @@ app.post("/todos/", async (request, response) => {
     } else if (!categoryArray.includes(category)) {
       response.status(400);
       response.send("Invalid Todo Category");
-    } else if (isDateValid !== true) {
+    } else if (dueDate === undefined) {
       response.status(400);
       response.send("Invalid Due Date");
-    } else {
+    } else if (dueDate !== undefined) {
+      const newDate = new Date(dueDate);
+      const formattedDate = format(newDate, "yyyy-MM-dd");
       const postTodoQuery = `
     INSERT INTO
-      todo (id,todo,priority,status,category,due_date) 
-    VALUES (
-      ${id},'${todo}','${priority}','${status}','${category}','${formattedDate}'
-    );
-    `;
+    todo (id, todo, priority, status,category,due_date)
+  VALUES
+    (${id}, '${todo}', '${priority}', '${status}','${category}','${formattedDate}');`;
       await database.run(postTodoQuery);
       response.send("Todo Successfully Added");
     }
@@ -249,9 +240,9 @@ app.post("/todos/", async (request, response) => {
 
 app.put("/todos/:todoId/", async (request, response) => {
   const { todoId } = request.params;
-  let updateColumn = "";
+  let updateColumn;
   const requestBody = request.body;
-  let formattedDate;
+
   switch (true) {
     case requestBody.todo !== undefined:
       updateColumn = "Todo";
@@ -282,9 +273,9 @@ app.put("/todos/:todoId/", async (request, response) => {
       break;
     case requestBody.dueDate !== undefined:
       try {
-        formattedDate = formatDate(requestBody.dueDate);
-        const isDateValid = isValid(new Date(formattedDate));
-        if (isDateValid === false) {
+        const newDate = new Date(requestBody.dueDate);
+        const formattedDate = format(newDate, "yyyy-MM-dd");
+        if (requestBody.dueDate !== formattedDate) {
           response.status(400);
           response.send("Invalid Due Date");
         } else {
@@ -296,8 +287,15 @@ app.put("/todos/:todoId/", async (request, response) => {
       }
       break;
   }
-  if (updateColumn !== "") {
-    const previousTodoQuery = `SELECT * FROM todo WHERE id = ${todoId}`;
+
+  if (updateColumn !== undefined) {
+    const previousTodoQuery = `
+  SELECT
+    *
+  FROM
+    todo
+  WHERE id = ${todoId};
+  `;
     const previousTodo = await database.get(previousTodoQuery);
     const {
       todo = previousTodo.todo,
@@ -306,18 +304,17 @@ app.put("/todos/:todoId/", async (request, response) => {
       category = previousTodo.category,
       dueDate = previousTodo.due_date,
     } = request.body;
+
     const updateTodoQuery = `
-      UPDATE
-        todo
-      SET
-        todo = '${todo}',
-        status = '${status}',
-        priority = '${priority}',
-        category = '${category}',
-        due_date = '${formattedDate}'
-      WHERE
-        id = ${todoId}
-      `;
+  UPDATE
+    todo
+  SET 
+    todo = '${todo}',
+    status = '${status}',
+    priority = '${priority}',
+    category = '${category}',
+    due_date = '${dueDate}'
+  `;
     await database.run(updateTodoQuery);
     response.send(`${updateColumn} Updated`);
   }
